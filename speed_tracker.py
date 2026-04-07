@@ -23,15 +23,19 @@ class SpeedTracker:
         field_w_m: float = 68.0,   # Standard football field width, metres
         field_w_px: float = 950.0,
         smooth: int = 15,
+        classes: list = None,
+        show_frame_id: bool = False,
     ):
-        self.weights   = weights
-        self.source    = source
-        self.out_dir   = Path(out_dir)
-        self.conf      = conf
-        self.imgsz     = imgsz
-        self.field_w_m = field_w_m
-        self.field_w_px = field_w_px
-        self.smooth    = smooth
+        self.weights       = weights
+        self.source        = source
+        self.out_dir       = Path(out_dir)
+        self.conf          = conf
+        self.imgsz         = imgsz
+        self.field_w_m     = field_w_m
+        self.field_w_px    = field_w_px
+        self.smooth        = smooth
+        self.classes       = classes if classes is not None else [1]
+        self.show_frame_id = show_frame_id
 
         # Runtime state (reset on each run)
         self._history        = None
@@ -109,7 +113,7 @@ class SpeedTracker:
                 break
 
             results = model.track(frame, imgsz=self.imgsz, conf=self.conf,
-                                   verbose=False, classes=[1], persist=True)
+                                   verbose=False, classes=self.classes, persist=True)
 
             csv_rows = []
             for r in results:
@@ -174,6 +178,15 @@ class SpeedTracker:
                                       round(speed, 3), round(self._max_speeds[pid], 3)])
 
             self._draw_top_overlay(frame, sum(self._total_dist.values()))
+
+            if self.show_frame_id:
+                fh, fw = frame.shape[:2]
+                label = f"frame {frame_id}"
+                cv2.putText(frame, label, (fw - 160, fh - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA)
+                cv2.putText(frame, label, (fw - 160, fh - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1, cv2.LINE_AA)
+
             writer.write(frame)
 
             if csv_rows:

@@ -8,8 +8,14 @@ Examples:
     # Model training
     python main.py train --model yolo26s.pt --data data.yaml --epochs 50
 
-    # Player detection (heatmap, radar, convex hull, spider web)
+    # Player detection (all overlays disabled by default; enable selectively)
     python main.py detect --weights best.pt --source input.mp4
+    python main.py detect --weights best.pt --source input.mp4 --show_heatmap --show_radar
+    python main.py detect --weights best.pt --source input.mp4 --show_spider_web --show_convex_hull
+
+    # Simple detection by category (bbox + label only)
+    python main.py category --weights best.pt --source input.mp4
+    python main.py category --weights best.pt --source input.mp4 --classes 0 1
 
     # Speed tracking
     python main.py speed --weights best.pt --source input.mp4 --field_w_px 950
@@ -20,9 +26,10 @@ import argparse
 from trainer import YOLOTrainer
 from player_detector import PlayerDetector
 from speed_tracker import SpeedTracker
+from category_detector import CategoryDetector
 
 
-class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker):
+class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetector):
     """
     Combines YOLOTrainer, PlayerDetector and SpeedTracker into one class.
     All parameters are passed through the constructor and stored as attributes.
@@ -44,10 +51,20 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker):
         workers: int = 4,
         # detection
         dot_radius: int = 5,
+        show_heatmap: bool = False,
+        show_radar: bool = False,
+        show_spider_web: bool = False,
+        show_convex_hull: bool = False,
+        classes: list = None,
+        # category detection
+        cat_out_dir: str = "out_category",
+        cat_classes: list = None,
         # speed
         field_w_m: float = 68.0,   # Standard football field width
         field_w_px: float = 950.0,
         smooth: int = 15,
+        speed_classes: list = None,
+        show_frame_id: bool = False,
     ):
         YOLOTrainer.__init__(
             self,
@@ -66,6 +83,20 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker):
             conf=conf,
             imgsz=imgsz,
             dot_radius=dot_radius,
+            show_heatmap=show_heatmap,
+            show_radar=show_radar,
+            show_spider_web=show_spider_web,
+            show_convex_hull=show_convex_hull,
+            classes=classes,
+        )
+        CategoryDetector.__init__(
+            self,
+            weights=weights,
+            source=source,
+            out_dir=cat_out_dir,
+            conf=conf,
+            imgsz=imgsz,
+            classes=cat_classes,
         )
         SpeedTracker.__init__(
             self,
@@ -77,6 +108,8 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker):
             field_w_m=field_w_m,
             field_w_px=field_w_px,
             smooth=smooth,
+            classes=speed_classes,
+            show_frame_id=show_frame_id,
         )
 
 
@@ -105,7 +138,27 @@ def build_parser():
     d.add_argument("--out_dir",    default="out")
     d.add_argument("--conf",       type=float, default=0.25)
     d.add_argument("--imgsz",      type=int,   default=1280)
-    d.add_argument("--dot_radius", type=int,   default=5)
+    d.add_argument("--dot_radius",      type=int,   default=5)
+    d.add_argument("--show_heatmap",    action="store_true", default=False,
+                   help="Show heatmap overlay (default: off)")
+    d.add_argument("--show_radar",      action="store_true", default=False,
+                   help="Show radar overlay (default: off)")
+    d.add_argument("--show_spider_web", action="store_true", default=False,
+                   help="Show spider-web lines between players (default: off)")
+    d.add_argument("--show_convex_hull", action="store_true", default=False,
+                   help="Show convex hull around players (default: off)")
+    d.add_argument("--classes", type=int, nargs="+", default=None,
+                   help="YOLO class IDs to detect, e.g. --classes 0 1 (default: 0)")
+
+    # --- category ---
+    c = sub.add_parser("category", help="Simple detection by category (bbox + label)")
+    c.add_argument("--weights",  required=True)
+    c.add_argument("--source",   required=True)
+    c.add_argument("--out_dir",  default="out_category")
+    c.add_argument("--conf",     type=float, default=0.25)
+    c.add_argument("--imgsz",    type=int,   default=1280)
+    c.add_argument("--classes",  type=int, nargs="+", default=None,
+                   help="YOLO class IDs to detect (default: all classes)")
 
     # --- speed ---
     s = sub.add_parser("speed", help="Speed and sprint tracking")
@@ -118,7 +171,11 @@ def build_parser():
                    help="Football field width in metres (default: 68)")
     s.add_argument("--field_w_px",   type=float, required=True,
                    help="Football field width in pixels in the source video")
-    s.add_argument("--smooth",       type=int,   default=15)
+    s.add_argument("--smooth",   type=int,   default=15)
+    s.add_argument("--classes", type=int, nargs="+", default=None,
+                   help="YOLO class IDs to track, e.g. --classes 1 (default: 1)")
+    s.add_argument("--show_frame_id", action="store_true", default=False,
+                   help="Show current frame number on each output frame (default: off)")
 
     return p
 
@@ -137,6 +194,17 @@ def main():
         )
         fa.train()
 
+    elif args.cmd == "category":
+        fa = FootballAnalytics(
+            weights=args.weights,
+            source=args.source,
+            cat_out_dir=args.out_dir,
+            conf=args.conf,
+            imgsz=args.imgsz,
+            cat_classes=args.classes,
+        )
+        fa.run()
+
     elif args.cmd == "detect":
         fa = FootballAnalytics(
             weights=args.weights,
@@ -145,6 +213,11 @@ def main():
             conf=args.conf,
             imgsz=args.imgsz,
             dot_radius=args.dot_radius,
+            show_heatmap=args.show_heatmap,
+            show_radar=args.show_radar,
+            show_spider_web=args.show_spider_web,
+            show_convex_hull=args.show_convex_hull,
+            classes=args.classes,
         )
         fa.detect()
 
@@ -158,6 +231,8 @@ def main():
             field_w_m=args.field_w_m,
             field_w_px=args.field_w_px,
             smooth=args.smooth,
+            speed_classes=args.classes,
+            show_frame_id=args.show_frame_id,
         )
         fa.track()
 

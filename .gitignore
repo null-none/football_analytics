@@ -1,0 +1,6 @@
+venv
+input.mp4
+best.pt
+__pycache__
+out
+out_speed

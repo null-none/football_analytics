@@ -19,6 +19,21 @@ _FIELD_ASPECT = 105.0 / 68.0
 
 
 class PlayerDetector:
+    """
+    Detects players in a video using a YOLO model and renders configurable overlays.
+
+    Overlay flags (all disabled by default):
+        show_heatmap     — accumulated heat-map of player positions (top-left corner).
+        show_radar       — mini football-field radar with player dots (top-right corner).
+        show_spider_web  — lines connecting every pair of detected players.
+        show_convex_hull — filled convex hull around all detected players.
+
+    Class filter:
+        classes — list of YOLO class IDs to detect (default: [0]).
+                  Use None to detect all classes.
+                  Check your model's class IDs with: model.names
+    """
+
     def __init__(
         self,
         weights: str = "best.pt",
@@ -27,13 +42,23 @@ class PlayerDetector:
         conf: float = 0.25,
         imgsz: int = 1280,
         dot_radius: int = 5,
+        show_heatmap: bool = False,
+        show_radar: bool = False,
+        show_spider_web: bool = False,
+        show_convex_hull: bool = False,
+        classes: list = None,
     ):
-        self.weights   = weights
-        self.source    = source
-        self.out_dir   = Path(out_dir)
-        self.conf      = conf
-        self.imgsz     = imgsz
-        self.dot_radius = dot_radius
+        self.weights          = weights
+        self.source           = source
+        self.out_dir          = Path(out_dir)
+        self.conf             = conf
+        self.imgsz            = imgsz
+        self.dot_radius       = dot_radius
+        self.show_heatmap     = show_heatmap
+        self.show_radar       = show_radar
+        self.show_spider_web  = show_spider_web
+        self.show_convex_hull = show_convex_hull
+        self.classes          = classes if classes is not None else [0]
 
     # ------------------------------------------------------------------
     # Field corner selection — 6 points
@@ -332,7 +357,7 @@ class PlayerDetector:
                     break
 
             results = model.predict(frame, imgsz=self.imgsz, conf=self.conf,
-                                    verbose=False, classes=[0])
+                                    verbose=False, classes=self.classes)
             rows = []
             centers = []
 
@@ -357,15 +382,16 @@ class PlayerDetector:
             heat_acc *= 0.97
             heat_acc = cv2.GaussianBlur(heat_acc, (0, 0), sigmaX=max(w, h) // 30)
 
-            # Spider web between all detected players
-            if len(centers) >= 2:
+            if self.show_spider_web and len(centers) >= 2:
                 self._draw_spider_web(frame, centers)
 
-            if len(centers) >= 3:
+            if self.show_convex_hull and len(centers) >= 3:
                 self._draw_convex_hull(frame, centers)
 
-            self._draw_heatmap(frame, heat_acc)
-            self._draw_football_radar(frame, centers, w, h, homography)
+            if self.show_heatmap:
+                self._draw_heatmap(frame, heat_acc)
+            if self.show_radar:
+                self._draw_football_radar(frame, centers, w, h, homography)
 
             if rows:
                 with open(csv_path, "a", newline="", encoding="utf-8") as f:
