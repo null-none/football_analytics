@@ -10,7 +10,7 @@ from ultralytics import YOLO
 
 # Radar overlay dimensions
 RADAR_W, RADAR_H = 260, 170
-HEAT_W, HEAT_H   = 220, 140
+HEAT_W, HEAT_H = 220, 140
 PAD = 10
 _RADAR_TITLE_H = 18
 
@@ -48,17 +48,17 @@ class PlayerDetector:
         show_convex_hull: bool = False,
         classes: list = None,
     ):
-        self.weights          = weights
-        self.source           = source
-        self.out_dir          = Path(out_dir)
-        self.conf             = conf
-        self.imgsz            = imgsz
-        self.dot_radius       = dot_radius
-        self.show_heatmap     = show_heatmap
-        self.show_radar       = show_radar
-        self.show_spider_web  = show_spider_web
+        self.weights = weights
+        self.source = source
+        self.out_dir = Path(out_dir)
+        self.conf = conf
+        self.imgsz = imgsz
+        self.dot_radius = dot_radius
+        self.show_heatmap = show_heatmap
+        self.show_radar = show_radar
+        self.show_spider_web = show_spider_web
         self.show_convex_hull = show_convex_hull
-        self.classes          = classes if classes is not None else [0]
+        self.classes = classes if classes is not None else [0]
 
     # ------------------------------------------------------------------
     # Field corner selection — 6 points
@@ -112,25 +112,52 @@ class PlayerDetector:
             cv2.addWeighted(disp, 0.5, img, 0.5, 0, disp)
 
             if len(pts) < N:
-                cv2.putText(disp, f"Click {LABELS[len(pts)]}  ({remaining:.0f}s)",
-                            (12, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.85,
-                            (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(
+                    disp,
+                    f"Click {LABELS[len(pts)]}  ({remaining:.0f}s)",
+                    (12, 32),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.85,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
             else:
-                cv2.putText(disp, "Done! Press any key...",
-                            (12, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.85,
-                            (0, 255, 120), 2, cv2.LINE_AA)
+                cv2.putText(
+                    disp,
+                    "Done! Press any key...",
+                    (12, 32),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.85,
+                    (0, 255, 120),
+                    2,
+                    cv2.LINE_AA,
+                )
 
             for i, (px, py) in enumerate(pts):
                 cv2.circle(disp, (px, py), 8, COLORS[i], -1, cv2.LINE_AA)
                 cv2.circle(disp, (px, py), 8, (255, 255, 255), 2, cv2.LINE_AA)
-                cv2.putText(disp, str(i + 1), (px + 10, py - 6),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(
+                    disp,
+                    str(i + 1),
+                    (px + 10, py - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
 
             if len(pts) >= 2:
                 # Draw polygon outline while selecting
-                cv2.polylines(disp, [np.array(pts, dtype=np.int32)],
-                              isClosed=(len(pts) == N),
-                              color=(200, 200, 0), thickness=2, lineType=cv2.LINE_AA)
+                cv2.polylines(
+                    disp,
+                    [np.array(pts, dtype=np.int32)],
+                    isClosed=(len(pts) == N),
+                    color=(200, 200, 0),
+                    thickness=2,
+                    lineType=cv2.LINE_AA,
+                )
 
             cv2.imshow(win, disp)
             key = cv2.waitKey(30) & 0xFF
@@ -138,7 +165,7 @@ class PlayerDetector:
             if key in (27, 32, 13):
                 cv2.destroyWindow(win)
                 return None
-            if key in (ord('r'), ord('R')):
+            if key in (ord("r"), ord("R")):
                 pts.clear()
             if len(pts) == N and key != 255:
                 break
@@ -170,8 +197,14 @@ class PlayerDetector:
         overlay = frame.copy()
         cv2.fillPoly(overlay, [hull], (0, 0, 255))
         cv2.addWeighted(overlay, 0.18, frame, 0.82, 0, frame)
-        cv2.polylines(frame, [hull], isClosed=True,
-                      color=(0, 0, 255), thickness=2, lineType=cv2.LINE_AA)
+        cv2.polylines(
+            frame,
+            [hull],
+            isClosed=True,
+            color=(0, 0, 255),
+            thickness=2,
+            lineType=cv2.LINE_AA,
+        )
 
     @staticmethod
     def _draw_spider_web(frame, centers):
@@ -227,22 +260,41 @@ class PlayerDetector:
         # Left penalty area
         cv2.rectangle(frame, (rx0, pen_y0), (rx0 + pen_w, pen_y0 + pen_h), lc, 1)
         # Right penalty area
-        cv2.rectangle(frame, (rx0 + rw - pen_w, pen_y0), (rx0 + rw, pen_y0 + pen_h), lc, 1)
+        cv2.rectangle(
+            frame, (rx0 + rw - pen_w, pen_y0), (rx0 + rw, pen_y0 + pen_h), lc, 1
+        )
 
         # Goal areas (5.5 m / 105 m ≈ 5.2%, height 18.32 m / 68 m ≈ 26.9%)
         goal_w = max(3, int(rw * 0.052))
         goal_h = max(5, int(rh * 0.269))
         goal_y0 = ry0 + (rh - goal_h) // 2
         cv2.rectangle(frame, (rx0, goal_y0), (rx0 + goal_w, goal_y0 + goal_h), lc, 1)
-        cv2.rectangle(frame, (rx0 + rw - goal_w, goal_y0), (rx0 + rw, goal_y0 + goal_h), lc, 1)
+        cv2.rectangle(
+            frame, (rx0 + rw - goal_w, goal_y0), (rx0 + rw, goal_y0 + goal_h), lc, 1
+        )
 
         # Title bar
         cv2.rectangle(frame, (x0, y0), (x0 + RADAR_W, y0 + RADAR_H), (180, 180, 180), 1)
-        cv2.putText(frame, "RADAR", (x0 + 6, y0 + _RADAR_TITLE_H - 4),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (220, 220, 220), 1, cv2.LINE_AA)
-        cv2.putText(frame, f"n={len(centers)}",
-                    (x0 + RADAR_W - 46, y0 + _RADAR_TITLE_H - 4),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.38, (160, 160, 160), 1, cv2.LINE_AA)
+        cv2.putText(
+            frame,
+            "RADAR",
+            (x0 + 6, y0 + _RADAR_TITLE_H - 4),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.42,
+            (220, 220, 220),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            frame,
+            f"n={len(centers)}",
+            (x0 + RADAR_W - 46, y0 + _RADAR_TITLE_H - 4),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.38,
+            (160, 160, 160),
+            1,
+            cv2.LINE_AA,
+        )
 
         if not centers:
             return
@@ -270,8 +322,9 @@ class PlayerDetector:
         n = len(radar_pts)
         for i in range(n):
             for j in range(i + 1, n):
-                cv2.line(frame, radar_pts[i], radar_pts[j],
-                         (0, 200, 255), 1, cv2.LINE_AA)
+                cv2.line(
+                    frame, radar_pts[i], radar_pts[j], (0, 200, 255), 1, cv2.LINE_AA
+                )
 
         # Player dots
         for px, py in radar_pts:
@@ -288,12 +341,20 @@ class PlayerDetector:
         else:
             h_norm = np.zeros((HEAT_H, HEAT_W), dtype=np.uint8)
         h_color = cv2.applyColorMap(h_norm, cv2.COLORMAP_JET)
-        roi = frame[y0:y0 + HEAT_H, x0:x0 + HEAT_W]
+        roi = frame[y0 : y0 + HEAT_H, x0 : x0 + HEAT_W]
         cv2.addWeighted(h_color, 0.6, roi, 0.4, 0, roi)
-        frame[y0:y0 + HEAT_H, x0:x0 + HEAT_W] = roi
+        frame[y0 : y0 + HEAT_H, x0 : x0 + HEAT_W] = roi
         cv2.rectangle(frame, (x0, y0), (x0 + HEAT_W, y0 + HEAT_H), (180, 180, 180), 1)
-        cv2.putText(frame, "HEATMAP", (x0 + 6, y0 + 14),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+        cv2.putText(
+            frame,
+            "HEATMAP",
+            (x0 + 6, y0 + 14),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
 
     # ------------------------------------------------------------------
     # Run
@@ -322,26 +383,32 @@ class PlayerDetector:
         if field_corners is not None:
             # Normalized destination: 6 key points on a [0,1]×[0,1] rectangle
             # Order: top-left, top-center, top-right, bottom-right, bottom-center, bottom-left
-            dst_norm = np.array([
-                [0.0, 0.0],
-                [0.5, 0.0],
-                [1.0, 0.0],
-                [1.0, 1.0],
-                [0.5, 1.0],
-                [0.0, 1.0],
-            ], dtype=np.float32)
+            dst_norm = np.array(
+                [
+                    [0.0, 0.0],
+                    [0.5, 0.0],
+                    [1.0, 0.0],
+                    [1.0, 1.0],
+                    [0.5, 1.0],
+                    [0.0, 1.0],
+                ],
+                dtype=np.float32,
+            )
             homography, _ = cv2.findHomography(field_corners, dst_norm)
             print("[OK] Homography computed from 6 football field points")
         else:
             print("[!] No corners selected — radar using simple normalization")
 
         out_path = self.out_dir / "result.mp4"
-        writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+        writer = cv2.VideoWriter(
+            str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h)
+        )
 
         csv_path = self.out_dir / "detections.csv"
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(
-                ["frame", "x1", "y1", "x2", "y2", "cx", "cy", "conf", "cls", "label"])
+                ["frame", "x1", "y1", "x2", "y2", "cx", "cy", "conf", "cls", "label"]
+            )
 
         heat_acc = np.zeros((h, w), dtype=np.float32)
         blob_r = max(w, h) // 12
@@ -356,8 +423,13 @@ class PlayerDetector:
                 if not ok:
                     break
 
-            results = model.predict(frame, imgsz=self.imgsz, conf=self.conf,
-                                    verbose=False, classes=self.classes)
+            results = model.predict(
+                frame,
+                imgsz=self.imgsz,
+                conf=self.conf,
+                verbose=False,
+                classes=self.classes,
+            )
             rows = []
             centers = []
 
@@ -376,8 +448,20 @@ class PlayerDetector:
                     cy_i = max(0, min(h - 1, int(cy)))
                     cv2.circle(heat_acc, (cx_i, cy_i), blob_r, 1.0, -1)
 
-                    rows.append([frame_id, int(x1), int(y1), int(x2), int(y2),
-                                  int(cx), int(cy), round(conf_val, 3), cls_id, label])
+                    rows.append(
+                        [
+                            frame_id,
+                            int(x1),
+                            int(y1),
+                            int(x2),
+                            int(y2),
+                            int(cx),
+                            int(cy),
+                            round(conf_val, 3),
+                            cls_id,
+                            label,
+                        ]
+                    )
 
             heat_acc *= 0.97
             heat_acc = cv2.GaussianBlur(heat_acc, (0, 0), sigmaX=max(w, h) // 30)

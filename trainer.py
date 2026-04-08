@@ -15,12 +15,12 @@ class YOLOTrainer:
         workers: int = 4,
     ):
         self.model_path = model_path
-        self.data_yaml  = data_yaml
-        self.imgsz      = imgsz
-        self.epochs     = epochs
-        self.batch      = batch
-        self.workers    = workers
-        self._model     = None
+        self.data_yaml = data_yaml
+        self.imgsz = imgsz
+        self.epochs = epochs
+        self.batch = batch
+        self.workers = workers
+        self._model = None
 
     def train(self):
         self._model = YOLO(self.model_path)

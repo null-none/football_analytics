@@ -149,7 +149,7 @@ from football_analytics.main import FootballAnalytics
 
 fa = FootballAnalytics(
     weights="best.pt",
-    source="match.mp4",
+    source="input.mp4",
     field_w_m=68,
     field_w_px=950,
 )
@@ -159,7 +159,7 @@ fa.detect()   # detection only (no overlays by default)
 # With overlays:
 fa2 = FootballAnalytics(
     weights="best.pt",
-    source="match.mp4",
+    source="input.mp4",
     show_heatmap=True,
     show_radar=True,
     show_spider_web=True,

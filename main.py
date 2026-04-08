@@ -60,7 +60,7 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
         cat_out_dir: str = "out_category",
         cat_classes: list = None,
         # speed
-        field_w_m: float = 68.0,   # Standard football field width
+        field_w_m: float = 68.0,  # Standard football field width
         field_w_px: float = 950.0,
         smooth: int = 15,
         speed_classes: list = None,
@@ -117,65 +117,110 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def build_parser():
     p = argparse.ArgumentParser(
-        description="Football Analytics — YOLO-based player detection and tracking")
+        description="Football Analytics — YOLO-based player detection and tracking"
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     # --- train ---
     t = sub.add_parser("train", help="Train YOLO model")
-    t.add_argument("--model",   default="yolo26s.pt")
-    t.add_argument("--data",    default="data.yaml")
-    t.add_argument("--imgsz",   type=int,   default=1280)
-    t.add_argument("--epochs",  type=int,   default=50)
-    t.add_argument("--batch",   type=int,   default=8)
-    t.add_argument("--workers", type=int,   default=4)
+    t.add_argument("--model", default="yolo26s.pt")
+    t.add_argument("--data", default="data.yaml")
+    t.add_argument("--imgsz", type=int, default=1280)
+    t.add_argument("--epochs", type=int, default=50)
+    t.add_argument("--batch", type=int, default=8)
+    t.add_argument("--workers", type=int, default=4)
 
     # --- detect ---
     d = sub.add_parser("detect", help="Player detection (heatmap, radar, spider web)")
-    d.add_argument("--weights",    required=True)
-    d.add_argument("--source",     required=True)
-    d.add_argument("--out_dir",    default="out")
-    d.add_argument("--conf",       type=float, default=0.25)
-    d.add_argument("--imgsz",      type=int,   default=1280)
-    d.add_argument("--dot_radius",      type=int,   default=5)
-    d.add_argument("--show_heatmap",    action="store_true", default=False,
-                   help="Show heatmap overlay (default: off)")
-    d.add_argument("--show_radar",      action="store_true", default=False,
-                   help="Show radar overlay (default: off)")
-    d.add_argument("--show_spider_web", action="store_true", default=False,
-                   help="Show spider-web lines between players (default: off)")
-    d.add_argument("--show_convex_hull", action="store_true", default=False,
-                   help="Show convex hull around players (default: off)")
-    d.add_argument("--classes", type=int, nargs="+", default=None,
-                   help="YOLO class IDs to detect, e.g. --classes 0 1 (default: 0)")
+    d.add_argument("--weights", required=True)
+    d.add_argument("--source", required=True)
+    d.add_argument("--out_dir", default="out")
+    d.add_argument("--conf", type=float, default=0.25)
+    d.add_argument("--imgsz", type=int, default=1280)
+    d.add_argument("--dot_radius", type=int, default=5)
+    d.add_argument(
+        "--show_heatmap",
+        action="store_true",
+        default=False,
+        help="Show heatmap overlay (default: off)",
+    )
+    d.add_argument(
+        "--show_radar",
+        action="store_true",
+        default=False,
+        help="Show radar overlay (default: off)",
+    )
+    d.add_argument(
+        "--show_spider_web",
+        action="store_true",
+        default=False,
+        help="Show spider-web lines between players (default: off)",
+    )
+    d.add_argument(
+        "--show_convex_hull",
+        action="store_true",
+        default=False,
+        help="Show convex hull around players (default: off)",
+    )
+    d.add_argument(
+        "--classes",
+        type=int,
+        nargs="+",
+        default=None,
+        help="YOLO class IDs to detect, e.g. --classes 0 1 (default: 0)",
+    )
 
     # --- category ---
     c = sub.add_parser("category", help="Simple detection by category (bbox + label)")
-    c.add_argument("--weights",  required=True)
-    c.add_argument("--source",   required=True)
-    c.add_argument("--out_dir",  default="out_category")
-    c.add_argument("--conf",     type=float, default=0.25)
-    c.add_argument("--imgsz",    type=int,   default=1280)
-    c.add_argument("--classes",  type=int, nargs="+", default=None,
-                   help="YOLO class IDs to detect (default: all classes)")
+    c.add_argument("--weights", required=True)
+    c.add_argument("--source", required=True)
+    c.add_argument("--out_dir", default="out_category")
+    c.add_argument("--conf", type=float, default=0.25)
+    c.add_argument("--imgsz", type=int, default=1280)
+    c.add_argument(
+        "--classes",
+        type=int,
+        nargs="+",
+        default=None,
+        help="YOLO class IDs to detect (default: all classes)",
+    )
 
     # --- speed ---
     s = sub.add_parser("speed", help="Speed and sprint tracking")
-    s.add_argument("--weights",      required=True)
-    s.add_argument("--source",       required=True)
-    s.add_argument("--out_dir",      default="out_speed")
-    s.add_argument("--conf",         type=float, default=0.25)
-    s.add_argument("--imgsz",        type=int,   default=1280)
-    s.add_argument("--field_w_m",    type=float, default=68.0,
-                   help="Football field width in metres (default: 68)")
-    s.add_argument("--field_w_px",   type=float, required=True,
-                   help="Football field width in pixels in the source video")
-    s.add_argument("--smooth",   type=int,   default=15)
-    s.add_argument("--classes", type=int, nargs="+", default=None,
-                   help="YOLO class IDs to track, e.g. --classes 1 (default: 1)")
-    s.add_argument("--show_frame_id", action="store_true", default=False,
-                   help="Show current frame number on each output frame (default: off)")
+    s.add_argument("--weights", required=True)
+    s.add_argument("--source", required=True)
+    s.add_argument("--out_dir", default="out_speed")
+    s.add_argument("--conf", type=float, default=0.25)
+    s.add_argument("--imgsz", type=int, default=1280)
+    s.add_argument(
+        "--field_w_m",
+        type=float,
+        default=68.0,
+        help="Football field width in metres (default: 68)",
+    )
+    s.add_argument(
+        "--field_w_px",
+        type=float,
+        required=True,
+        help="Football field width in pixels in the source video",
+    )
+    s.add_argument("--smooth", type=int, default=15)
+    s.add_argument(
+        "--classes",
+        type=int,
+        nargs="+",
+        default=None,
+        help="YOLO class IDs to track, e.g. --classes 1 (default: 1)",
+    )
+    s.add_argument(
+        "--show_frame_id",
+        action="store_true",
+        default=False,
+        help="Show current frame number on each output frame (default: off)",
+    )
 
     return p
 
