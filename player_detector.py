@@ -159,7 +159,7 @@ class PlayerDetector:
                     lineType=cv2.LINE_AA,
                 )
 
-            cv2.imshow(win, disp)
+            #cv2.imshow(win, disp)
             key = cv2.waitKey(30) & 0xFF
 
             if key in (27, 32, 13):
@@ -482,7 +482,7 @@ class PlayerDetector:
                     csv.writer(f).writerows(rows)
 
             writer.write(frame)
-            cv2.imshow("Football Analytics — Player Detection", frame)
+            #cv2.imshow("Football Analytics — Player Detection", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
