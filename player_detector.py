@@ -84,51 +84,50 @@ class PlayerDetector:
     @staticmethod
     def _draw_defense_lines(frame, centers, n):
         """
-        Draw two defensive lines connecting the actual defenders.
-
-        Sorts players by Y. The top-n (lowest Y) and bottom-n (highest Y) groups
-        are each connected by a line between their leftmost and rightmost players.
+        Draw the defensive line through all n defenders sorted left→right by X.
+        Each point keeps its real Y, so the line accurately reflects how deep
+        each defender is positioned — not a straight average.
         """
         if len(centers) < n:
             return
 
+        frame_w = frame.shape[1]
         sorted_centers = sorted(centers, key=lambda p: p[1])
 
         for group, color in (
             (sorted_centers[:n],  (0, 220, 255)),   # top side — yellow
             (sorted_centers[-n:], (255, 160, 0)),   # bottom side — blue
         ):
-            # Sort group left→right
-            group_x = sorted(group, key=lambda p: p[0])
-            lx, ly = group_x[0]   # leftmost defender
-            rx, ry = group_x[-1]  # rightmost defender
+            # Sort left → right by X
+            pts = sorted(group, key=lambda p: p[0])
+            arr = np.array([(int(x), int(y)) for x, y in pts], dtype=np.int32)
 
-            # Extend the line through the two extreme defenders to frame edges
-            frame_w = frame.shape[1]
+            # Extended ghost line: extrapolate from leftmost and rightmost to frame edges
+            (lx, ly), (rx, ry) = arr[0], arr[-1]
             if rx != lx:
                 slope = (ry - ly) / (rx - lx)
-                y_left  = int(ly - slope * lx)
-                y_right = int(ry + slope * (frame_w - rx))
+                y_edge_l = int(ly - slope * lx)
+                y_edge_r = int(ry + slope * (frame_w - rx))
             else:
-                y_left = y_right = int((ly + ry) / 2)
+                y_edge_l = y_edge_r = int((ly + ry) / 2)
 
-            # Dashed extended line (frame edge → frame edge, semi-transparent)
             overlay = frame.copy()
-            cv2.line(overlay, (0, y_left), (frame_w, y_right), color, 1, cv2.LINE_AA)
-            cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
+            cv2.line(overlay, (0, y_edge_l), (lx, ly), color, 1, cv2.LINE_AA)
+            cv2.line(overlay, (rx, ry), (frame_w, y_edge_r), color, 1, cv2.LINE_AA)
+            cv2.addWeighted(overlay, 0.35, frame, 0.65, 0, frame)
 
-            # Solid segment between the two extreme defenders
-            cv2.line(frame, (int(lx), int(ly)), (int(rx), int(ry)), color, 2, cv2.LINE_AA)
+            # Main polyline through all defender points
+            cv2.polylines(frame, [arr], isClosed=False, color=color, thickness=2, lineType=cv2.LINE_AA)
 
-            # Highlight all defenders in the group
-            for cx, cy in group:
-                cv2.circle(frame, (int(cx), int(cy)), 7, color, 2, cv2.LINE_AA)
+            # Dot on each defender
+            for x, y in arr:
+                cv2.circle(frame, (x, y), 6, color, -1, cv2.LINE_AA)
 
-            mid_x = int((lx + rx) / 2)
-            mid_y = int((ly + ry) / 2)
+            mid_x = int(arr[:, 0].mean())
+            mid_y = int(arr[:, 1].mean())
             cv2.putText(
                 frame, "DEF",
-                (mid_x - 18, mid_y - 8),
+                (mid_x - 18, mid_y - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2, cv2.LINE_AA,
             )
 
@@ -260,7 +259,8 @@ class PlayerDetector:
                     label = r.names.get(cls_id, str(cls_id))
                     cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
 
-                    self._draw_center_dot(frame, cx, cy, r=self.dot_radius)
+                    if not self.show_defense_zone:
+                        self._draw_center_dot(frame, cx, cy, r=self.dot_radius)
                     centers.append((cx, cy))
                     centers_by_cls.setdefault(cls_id, []).append((cx, cy))
 
