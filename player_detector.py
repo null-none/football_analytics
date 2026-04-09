@@ -1,21 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import time
 import csv
 import cv2
 import numpy as np
 from pathlib import Path
 from ultralytics import YOLO
-
-# Radar overlay dimensions
-RADAR_W, RADAR_H = 260, 170
-HEAT_W, HEAT_H = 220, 140
-PAD = 10
-_RADAR_TITLE_H = 18
-
-# Football field proportions (105 m × 68 m → ratio ≈ 1.544)
-_FIELD_ASPECT = 105.0 / 68.0
 
 
 class PlayerDetector:
@@ -23,8 +13,6 @@ class PlayerDetector:
     Detects players in a video using a YOLO model and renders configurable overlays.
 
     Overlay flags (all disabled by default):
-        show_heatmap     — accumulated heat-map of player positions (top-left corner).
-        show_radar       — mini football-field radar with player dots (top-right corner).
         show_spider_web  — lines connecting every pair of detected players.
         show_convex_hull — filled convex hull around all detected players.
 
@@ -42,10 +30,11 @@ class PlayerDetector:
         conf: float = 0.25,
         imgsz: int = 1280,
         dot_radius: int = 5,
-        show_heatmap: bool = False,
-        show_radar: bool = False,
         show_spider_web: bool = False,
         show_convex_hull: bool = False,
+        show_defense_line: bool = False,
+        defense_n: int = 4,
+        show_defense_zone: bool = False,
         classes: list = None,
     ):
         self.weights = weights
@@ -54,128 +43,14 @@ class PlayerDetector:
         self.conf = conf
         self.imgsz = imgsz
         self.dot_radius = dot_radius
-        self.show_heatmap = show_heatmap
-        self.show_radar = show_radar
         self.show_spider_web = show_spider_web
         self.show_convex_hull = show_convex_hull
+        self.show_defense_line = show_defense_line
+        self.defense_n = defense_n
+        self.show_defense_zone = show_defense_zone
+        # smoothing state: {cls_id: {'pts': np.array, 'ttl': int}}
+        self._dzone_state = {}
         self.classes = classes if classes is not None else [0]
-
-    # ------------------------------------------------------------------
-    # Field corner selection — 6 points
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def select_field_corners(first_frame, timeout_sec=20):
-        """
-        Click 6 points on the football field in this order:
-          1 — top-left corner
-          2 — top-center (where halfway line meets top touchline)
-          3 — top-right corner
-          4 — bottom-right corner
-          5 — bottom-center (where halfway line meets bottom touchline)
-          6 — bottom-left corner
-        """
-        LABELS = [
-            "1: top-left",
-            "2: top-center (mid)",
-            "3: top-right",
-            "4: bottom-right",
-            "5: bottom-center (mid)",
-            "6: bottom-left",
-        ]
-        COLORS = [
-            (0, 255, 255),
-            (0, 220, 200),
-            (0, 180, 255),
-            (0, 120, 255),
-            (0, 80, 220),
-            (0, 40, 200),
-        ]
-        N = 6
-
-        pts = []
-        img = first_frame.copy()
-        win = "Select 6 football field points | Esc/Space - skip | R - reset"
-        cv2.namedWindow(win, cv2.WINDOW_NORMAL)
-
-        def on_mouse(event, x, y, *_):
-            if event == cv2.EVENT_LBUTTONDOWN and len(pts) < N:
-                pts.append((x, y))
-
-        cv2.setMouseCallback(win, on_mouse)
-        deadline = time.time() + timeout_sec
-
-        while True:
-            remaining = max(0, deadline - time.time())
-            disp = img.copy()
-            cv2.rectangle(disp, (0, 0), (disp.shape[1], 52), (0, 0, 0), -1)
-            cv2.addWeighted(disp, 0.5, img, 0.5, 0, disp)
-
-            if len(pts) < N:
-                cv2.putText(
-                    disp,
-                    f"Click {LABELS[len(pts)]}  ({remaining:.0f}s)",
-                    (12, 32),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.85,
-                    (255, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
-            else:
-                cv2.putText(
-                    disp,
-                    "Done! Press any key...",
-                    (12, 32),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.85,
-                    (0, 255, 120),
-                    2,
-                    cv2.LINE_AA,
-                )
-
-            for i, (px, py) in enumerate(pts):
-                cv2.circle(disp, (px, py), 8, COLORS[i], -1, cv2.LINE_AA)
-                cv2.circle(disp, (px, py), 8, (255, 255, 255), 2, cv2.LINE_AA)
-                cv2.putText(
-                    disp,
-                    str(i + 1),
-                    (px + 10, py - 6),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (255, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
-
-            if len(pts) >= 2:
-                # Draw polygon outline while selecting
-                cv2.polylines(
-                    disp,
-                    [np.array(pts, dtype=np.int32)],
-                    isClosed=(len(pts) == N),
-                    color=(200, 200, 0),
-                    thickness=2,
-                    lineType=cv2.LINE_AA,
-                )
-
-            #cv2.imshow(win, disp)
-            key = cv2.waitKey(30) & 0xFF
-
-            if key in (27, 32, 13):
-                cv2.destroyWindow(win)
-                return None
-            if key in (ord("r"), ord("R")):
-                pts.clear()
-            if len(pts) == N and key != 255:
-                break
-            if remaining == 0:
-                print("[!] Timeout — radar running without homography")
-                cv2.destroyWindow(win)
-                return None
-
-        cv2.destroyWindow(win)
-        return np.array(pts, dtype=np.float32)
 
     # ------------------------------------------------------------------
     # Drawing helpers
@@ -207,6 +82,115 @@ class PlayerDetector:
         )
 
     @staticmethod
+    def _draw_defense_lines(frame, centers, n):
+        """
+        Draw two defensive lines connecting the actual defenders.
+
+        Sorts players by Y. The top-n (lowest Y) and bottom-n (highest Y) groups
+        are each connected by a line between their leftmost and rightmost players.
+        """
+        if len(centers) < n:
+            return
+
+        sorted_centers = sorted(centers, key=lambda p: p[1])
+
+        for group, color in (
+            (sorted_centers[:n],  (0, 220, 255)),   # top side — yellow
+            (sorted_centers[-n:], (255, 160, 0)),   # bottom side — blue
+        ):
+            # Sort group left→right
+            group_x = sorted(group, key=lambda p: p[0])
+            lx, ly = group_x[0]   # leftmost defender
+            rx, ry = group_x[-1]  # rightmost defender
+
+            # Extend the line through the two extreme defenders to frame edges
+            frame_w = frame.shape[1]
+            if rx != lx:
+                slope = (ry - ly) / (rx - lx)
+                y_left  = int(ly - slope * lx)
+                y_right = int(ry + slope * (frame_w - rx))
+            else:
+                y_left = y_right = int((ly + ry) / 2)
+
+            # Dashed extended line (frame edge → frame edge, semi-transparent)
+            overlay = frame.copy()
+            cv2.line(overlay, (0, y_left), (frame_w, y_right), color, 1, cv2.LINE_AA)
+            cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
+
+            # Solid segment between the two extreme defenders
+            cv2.line(frame, (int(lx), int(ly)), (int(rx), int(ry)), color, 2, cv2.LINE_AA)
+
+            # Highlight all defenders in the group
+            for cx, cy in group:
+                cv2.circle(frame, (int(cx), int(cy)), 7, color, 2, cv2.LINE_AA)
+
+            mid_x = int((lx + rx) / 2)
+            mid_y = int((ly + ry) / 2)
+            cv2.putText(
+                frame, "DEF",
+                (mid_x - 18, mid_y - 8),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2, cv2.LINE_AA,
+            )
+
+    @staticmethod
+    def _draw_defense_zone(frame, centers_by_cls, n, state):
+        """
+        For each detected team draw a vertical defensive line through the last n defenders.
+
+        The left/right side is determined automatically by average X — no hardcoded class IDs.
+        Positions are smoothed with EMA and fade out gradually when detections disappear.
+        """
+        _ALPHA      = 0.35   # EMA weight for new positions (lower = smoother)
+        _FADE_FRAMES = 20    # frames to fully fade out after losing detections
+        _COLORS = [(0, 220, 255), (255, 160, 0), (100, 255, 100), (255, 80, 200)]
+
+        # Assign colors and determine which side each class belongs to
+        avg_x = {cls_id: float(np.mean([p[0] for p in pts]))
+                 for cls_id, pts in centers_by_cls.items() if pts}
+        sorted_cls = sorted(avg_x, key=avg_x.get)  # left → right by average X
+
+        for color_idx, cls_id in enumerate(sorted_cls):
+            color = _COLORS[color_idx % len(_COLORS)]
+            pts = centers_by_cls.get(cls_id, [])
+
+            # Determine side: left-side teams defend on the left (pick lowest X defenders)
+            is_left = (color_idx < len(sorted_cls) / 2)
+
+            if len(pts) >= 2:
+                # Pick last n defenders by X
+                defenders_raw = sorted(pts, key=lambda p: p[0], reverse=not is_left)[:n]
+                # Sort by Y for a clean vertical polyline
+                defenders_raw = sorted(defenders_raw, key=lambda p: p[1])
+                new_pts = np.array([[p[0], p[1]] for p in defenders_raw], dtype=np.float32)
+
+                s = state.get(cls_id)
+                if s is None or len(s['pts']) != len(new_pts):
+                    # First detection or count changed — reset
+                    state[cls_id] = {'pts': new_pts.copy(), 'ttl': _FADE_FRAMES}
+                else:
+                    # EMA smooth
+                    s['pts'] = _ALPHA * new_pts + (1 - _ALPHA) * s['pts']
+                    s['ttl'] = _FADE_FRAMES
+            else:
+                # No detection this frame — decay ttl
+                s = state.get(cls_id)
+                if s is None:
+                    continue
+                s['ttl'] = max(0, s['ttl'] - 1)
+                if s['ttl'] == 0:
+                    continue
+
+            s = state[cls_id]
+            opacity = s['ttl'] / _FADE_FRAMES
+            arr = s['pts'].astype(np.int32)
+
+            overlay = frame.copy()
+            cv2.polylines(overlay, [arr], isClosed=False, color=color, thickness=2, lineType=cv2.LINE_AA)
+            for x, y in arr:
+                cv2.circle(overlay, (int(x), int(y)), 5, color, -1, cv2.LINE_AA)
+            cv2.addWeighted(overlay, opacity, frame, 1 - opacity, 0, frame)
+
+    @staticmethod
     def _draw_spider_web(frame, centers):
         """Draw lines between every pair of detected players (spider-web effect)."""
         n = len(centers)
@@ -222,139 +206,6 @@ class PlayerDetector:
                 overlay = frame.copy()
                 cv2.line(overlay, p1, p2, (0, 200, 255), 1, cv2.LINE_AA)
                 cv2.addWeighted(overlay, alpha, frame, 1.0 - alpha, 0, frame)
-
-    @staticmethod
-    def _draw_football_radar(frame, centers, frame_w, frame_h, homography):
-        """Draw a mini football-field radar with player positions."""
-        x0 = frame_w - RADAR_W - PAD
-        y0 = PAD
-        rx0 = x0 + 2
-        ry0 = y0 + _RADAR_TITLE_H
-        rw = RADAR_W - 4
-        rh = RADAR_H - _RADAR_TITLE_H - 2
-
-        # --- background (green field) ---
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (rx0, ry0), (rx0 + rw, ry0 + rh), (34, 100, 34), -1)
-        cv2.addWeighted(overlay, 0.80, frame, 0.20, 0, frame)
-
-        lc = (200, 230, 200)  # line color (light green-white)
-
-        # Outer boundary
-        cv2.rectangle(frame, (rx0, ry0), (rx0 + rw, ry0 + rh), lc, 1)
-
-        # Halfway line (vertical center)
-        cx_mid = rx0 + rw // 2
-        cy_mid = ry0 + rh // 2
-        cv2.line(frame, (cx_mid, ry0), (cx_mid, ry0 + rh), lc, 1)
-
-        # Center circle
-        r_circle = max(6, int(rh * 0.16))
-        cv2.circle(frame, (cx_mid, cy_mid), r_circle, lc, 1, cv2.LINE_AA)
-        cv2.circle(frame, (cx_mid, cy_mid), 2, lc, -1)
-
-        # Penalty areas (left and right) — ~16.5 m on a 105 m field ≈ 15.7% of length
-        pen_w = max(6, int(rw * 0.157))
-        pen_h = max(10, int(rh * 0.588))  # 40 m / 68 m of field height
-        pen_y0 = ry0 + (rh - pen_h) // 2
-        # Left penalty area
-        cv2.rectangle(frame, (rx0, pen_y0), (rx0 + pen_w, pen_y0 + pen_h), lc, 1)
-        # Right penalty area
-        cv2.rectangle(
-            frame, (rx0 + rw - pen_w, pen_y0), (rx0 + rw, pen_y0 + pen_h), lc, 1
-        )
-
-        # Goal areas (5.5 m / 105 m ≈ 5.2%, height 18.32 m / 68 m ≈ 26.9%)
-        goal_w = max(3, int(rw * 0.052))
-        goal_h = max(5, int(rh * 0.269))
-        goal_y0 = ry0 + (rh - goal_h) // 2
-        cv2.rectangle(frame, (rx0, goal_y0), (rx0 + goal_w, goal_y0 + goal_h), lc, 1)
-        cv2.rectangle(
-            frame, (rx0 + rw - goal_w, goal_y0), (rx0 + rw, goal_y0 + goal_h), lc, 1
-        )
-
-        # Title bar
-        cv2.rectangle(frame, (x0, y0), (x0 + RADAR_W, y0 + RADAR_H), (180, 180, 180), 1)
-        cv2.putText(
-            frame,
-            "RADAR",
-            (x0 + 6, y0 + _RADAR_TITLE_H - 4),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.42,
-            (220, 220, 220),
-            1,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            frame,
-            f"n={len(centers)}",
-            (x0 + RADAR_W - 46, y0 + _RADAR_TITLE_H - 4),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.38,
-            (160, 160, 160),
-            1,
-            cv2.LINE_AA,
-        )
-
-        if not centers:
-            return
-
-        # Map player positions onto the radar
-        src_pts = np.array(centers, dtype=np.float32).reshape(-1, 1, 2)
-        if homography is not None:
-            dst = cv2.perspectiveTransform(src_pts, homography)
-            radar_pts = []
-            for p in dst:
-                nx, ny = float(p[0][0]), float(p[0][1])
-                px = rx0 + int(np.clip(nx, 0, 1) * rw)
-                py = ry0 + int(np.clip(ny, 0, 1) * rh)
-                radar_pts.append((px, py))
-        else:
-            radar_pts = []
-            for cx, cy in centers:
-                px = rx0 + int(cx / frame_w * rw)
-                py = ry0 + int(cy / frame_h * rh)
-                px = max(rx0, min(rx0 + rw - 1, px))
-                py = max(ry0, min(ry0 + rh - 1, py))
-                radar_pts.append((px, py))
-
-        # Spider web on radar
-        n = len(radar_pts)
-        for i in range(n):
-            for j in range(i + 1, n):
-                cv2.line(
-                    frame, radar_pts[i], radar_pts[j], (0, 200, 255), 1, cv2.LINE_AA
-                )
-
-        # Player dots
-        for px, py in radar_pts:
-            cv2.circle(frame, (px, py), 4, (0, 60, 255), -1, cv2.LINE_AA)
-            cv2.circle(frame, (px, py), 4, (255, 255, 255), 1, cv2.LINE_AA)
-
-    @staticmethod
-    def _draw_heatmap(frame, heat_acc):
-        x0, y0 = PAD, PAD
-        h_small = cv2.resize(heat_acc, (HEAT_W, HEAT_H))
-        max_val = h_small.max()
-        if max_val > 0:
-            h_norm = (h_small / max_val * 255).astype(np.uint8)
-        else:
-            h_norm = np.zeros((HEAT_H, HEAT_W), dtype=np.uint8)
-        h_color = cv2.applyColorMap(h_norm, cv2.COLORMAP_JET)
-        roi = frame[y0 : y0 + HEAT_H, x0 : x0 + HEAT_W]
-        cv2.addWeighted(h_color, 0.6, roi, 0.4, 0, roi)
-        frame[y0 : y0 + HEAT_H, x0 : x0 + HEAT_W] = roi
-        cv2.rectangle(frame, (x0, y0), (x0 + HEAT_W, y0 + HEAT_H), (180, 180, 180), 1)
-        cv2.putText(
-            frame,
-            "HEATMAP",
-            (x0 + 6, y0 + 14),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.45,
-            (255, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
 
     # ------------------------------------------------------------------
     # Run
@@ -373,32 +224,6 @@ class PlayerDetector:
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        ok, first_frame = cap.read()
-        if not ok:
-            raise RuntimeError("Cannot read first frame")
-
-        # 6-point field selection for homography
-        field_corners = self.select_field_corners(first_frame)
-        homography = None
-        if field_corners is not None:
-            # Normalized destination: 6 key points on a [0,1]×[0,1] rectangle
-            # Order: top-left, top-center, top-right, bottom-right, bottom-center, bottom-left
-            dst_norm = np.array(
-                [
-                    [0.0, 0.0],
-                    [0.5, 0.0],
-                    [1.0, 0.0],
-                    [1.0, 1.0],
-                    [0.5, 1.0],
-                    [0.0, 1.0],
-                ],
-                dtype=np.float32,
-            )
-            homography, _ = cv2.findHomography(field_corners, dst_norm)
-            print("[OK] Homography computed from 6 football field points")
-        else:
-            print("[!] No corners selected — radar using simple normalization")
-
         out_path = self.out_dir / "result.mp4"
         writer = cv2.VideoWriter(
             str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h)
@@ -410,18 +235,11 @@ class PlayerDetector:
                 ["frame", "x1", "y1", "x2", "y2", "cx", "cy", "conf", "cls", "label"]
             )
 
-        heat_acc = np.zeros((h, w), dtype=np.float32)
-        blob_r = max(w, h) // 12
-        frames_to_process = [first_frame]
-
         frame_id = 0
         while True:
-            if frames_to_process:
-                frame = frames_to_process.pop(0)
-            else:
-                ok, frame = cap.read()
-                if not ok:
-                    break
+            ok, frame = cap.read()
+            if not ok:
+                break
 
             results = model.predict(
                 frame,
@@ -432,6 +250,7 @@ class PlayerDetector:
             )
             rows = []
             centers = []
+            centers_by_cls = {}
 
             for r in results:
                 for b in r.boxes:
@@ -443,10 +262,7 @@ class PlayerDetector:
 
                     self._draw_center_dot(frame, cx, cy, r=self.dot_radius)
                     centers.append((cx, cy))
-
-                    cx_i = max(0, min(w - 1, int(cx)))
-                    cy_i = max(0, min(h - 1, int(cy)))
-                    cv2.circle(heat_acc, (cx_i, cy_i), blob_r, 1.0, -1)
+                    centers_by_cls.setdefault(cls_id, []).append((cx, cy))
 
                     rows.append(
                         [
@@ -463,8 +279,11 @@ class PlayerDetector:
                         ]
                     )
 
-            heat_acc *= 0.97
-            heat_acc = cv2.GaussianBlur(heat_acc, (0, 0), sigmaX=max(w, h) // 30)
+            if self.show_defense_line:
+                self._draw_defense_lines(frame, centers, self.defense_n)
+
+            if self.show_defense_zone:
+                self._draw_defense_zone(frame, centers_by_cls, self.defense_n, self._dzone_state)
 
             if self.show_spider_web and len(centers) >= 2:
                 self._draw_spider_web(frame, centers)
@@ -472,17 +291,12 @@ class PlayerDetector:
             if self.show_convex_hull and len(centers) >= 3:
                 self._draw_convex_hull(frame, centers)
 
-            if self.show_heatmap:
-                self._draw_heatmap(frame, heat_acc)
-            if self.show_radar:
-                self._draw_football_radar(frame, centers, w, h, homography)
-
             if rows:
                 with open(csv_path, "a", newline="", encoding="utf-8") as f:
                     csv.writer(f).writerows(rows)
 
             writer.write(frame)
-            #cv2.imshow("Football Analytics — Player Detection", frame)
+            cv2.imshow("Football Analytics — Player Detection", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 

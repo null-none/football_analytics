@@ -10,7 +10,6 @@ Examples:
 
     # Player detection (all overlays disabled by default; enable selectively)
     python main.py detect --weights best.pt --source input.mp4
-    python main.py detect --weights best.pt --source input.mp4 --show_heatmap --show_radar
     python main.py detect --weights best.pt --source input.mp4 --show_spider_web --show_convex_hull
 
     # Simple detection by category (bbox + label only)
@@ -51,19 +50,18 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
         workers: int = 4,
         # detection
         dot_radius: int = 5,
-        show_heatmap: bool = False,
-        show_radar: bool = False,
         show_spider_web: bool = False,
         show_convex_hull: bool = False,
+        show_defense_line: bool = False,
+        defense_n: int = 4,
+        show_defense_zone: bool = False,
         classes: list = None,
         # category detection
         cat_out_dir: str = "out_category",
-        cat_classes: list = None,
         # speed
         field_w_m: float = 68.0,  # Standard football field width
         field_w_px: float = 950.0,
         smooth: int = 15,
-        speed_classes: list = None,
         show_frame_id: bool = False,
     ):
         YOLOTrainer.__init__(
@@ -83,10 +81,11 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
             conf=conf,
             imgsz=imgsz,
             dot_radius=dot_radius,
-            show_heatmap=show_heatmap,
-            show_radar=show_radar,
             show_spider_web=show_spider_web,
             show_convex_hull=show_convex_hull,
+            show_defense_line=show_defense_line,
+            defense_n=defense_n,
+            show_defense_zone=show_defense_zone,
             classes=classes,
         )
         CategoryDetector.__init__(
@@ -96,7 +95,7 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
             out_dir=cat_out_dir,
             conf=conf,
             imgsz=imgsz,
-            classes=cat_classes,
+            classes=classes,
         )
         SpeedTracker.__init__(
             self,
@@ -108,7 +107,7 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
             field_w_m=field_w_m,
             field_w_px=field_w_px,
             smooth=smooth,
-            classes=speed_classes,
+            classes=classes,
             show_frame_id=show_frame_id,
         )
 
@@ -134,25 +133,13 @@ def build_parser():
     t.add_argument("--workers", type=int, default=4)
 
     # --- detect ---
-    d = sub.add_parser("detect", help="Player detection (heatmap, radar, spider web)")
+    d = sub.add_parser("detect", help="Player detection (spider web, convex hull)")
     d.add_argument("--weights", required=True)
     d.add_argument("--source", required=True)
     d.add_argument("--out_dir", default="out")
     d.add_argument("--conf", type=float, default=0.25)
     d.add_argument("--imgsz", type=int, default=1280)
     d.add_argument("--dot_radius", type=int, default=5)
-    d.add_argument(
-        "--show_heatmap",
-        action="store_true",
-        default=False,
-        help="Show heatmap overlay (default: off)",
-    )
-    d.add_argument(
-        "--show_radar",
-        action="store_true",
-        default=False,
-        help="Show radar overlay (default: off)",
-    )
     d.add_argument(
         "--show_spider_web",
         action="store_true",
@@ -164,6 +151,24 @@ def build_parser():
         action="store_true",
         default=False,
         help="Show convex hull around players (default: off)",
+    )
+    d.add_argument(
+        "--show_defense_line",
+        action="store_true",
+        default=False,
+        help="Show defensive lines for both sides (default: off)",
+    )
+    d.add_argument(
+        "--defense_n",
+        type=int,
+        default=4,
+        help="Number of defenders per side for the defensive line (default: 4)",
+    )
+    d.add_argument(
+        "--show_defense_zone",
+        action="store_true",
+        default=False,
+        help="Show vertical defensive zone lines for both sides (default: off)",
     )
     d.add_argument(
         "--classes",
@@ -246,7 +251,7 @@ def main():
             cat_out_dir=args.out_dir,
             conf=args.conf,
             imgsz=args.imgsz,
-            cat_classes=args.classes,
+            classes=args.classes,
         )
         fa.run()
 
@@ -258,10 +263,11 @@ def main():
             conf=args.conf,
             imgsz=args.imgsz,
             dot_radius=args.dot_radius,
-            show_heatmap=args.show_heatmap,
-            show_radar=args.show_radar,
             show_spider_web=args.show_spider_web,
             show_convex_hull=args.show_convex_hull,
+            show_defense_line=args.show_defense_line,
+            defense_n=args.defense_n,
+            show_defense_zone=args.show_defense_zone,
             classes=args.classes,
         )
         fa.detect()
@@ -276,7 +282,7 @@ def main():
             field_w_m=args.field_w_m,
             field_w_px=args.field_w_px,
             smooth=args.smooth,
-            speed_classes=args.classes,
+            classes=args.classes,
             show_frame_id=args.show_frame_id,
         )
         fa.track()

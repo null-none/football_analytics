@@ -38,7 +38,7 @@ class CategoryDetector:
         self.out_dir = Path(out_dir)
         self.conf = conf
         self.imgsz = imgsz
-        self.cat_classes = classes  # None → detect all classes
+        self.classes = classes
 
     def _class_color(self, cls_id: int) -> tuple:
         return CategoryDetector._COLORS[cls_id % len(CategoryDetector._COLORS)]
@@ -78,7 +78,7 @@ class CategoryDetector:
                 imgsz=self.imgsz,
                 conf=self.conf,
                 verbose=False,
-                classes=self.cat_classes,
+                classes=self.classes,
             )
 
             rows = []

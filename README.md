@@ -1,6 +1,6 @@
 # Football Analytics
 
-YOLO-based player analytics for football: detection, heatmap, radar, speed tracking, sprint stats.
+YOLO-based player analytics for football: detection, speed tracking, sprint stats.
 
 ## Install
 
@@ -55,8 +55,6 @@ python main.py detect \
     --weights best.pt \
     --source input.mp4 \
     --classes 0 \
-    --show_heatmap \
-    --show_radar \
     --show_spider_web \
     --show_convex_hull
 ```
@@ -65,39 +63,30 @@ All visual overlays are **disabled by default**. Enable them individually with f
 
 | Flag | Overlay |
 |---|---|
-| `--show_heatmap` | Accumulated heat-map of player positions (top-left) |
-| `--show_radar` | Mini football-field radar with player dots (top-right) |
 | `--show_spider_web` | Lines connecting every pair of detected players |
 | `--show_convex_hull` | Filled convex hull around all detected players |
+| `--show_defense_line` | Defensive lines for both sides |
 
-| Flag | Description |
-|---|---|
-| `--classes 0` | Only class 0 (default) |
-| `--classes 0 1` | Classes 0 and 1 |
+| Flag | Default | Description |
+|---|---|---|
+| `--defense_n 4` | `4` | Number of defenders per side for the defensive line |
+| `--classes 0` | `0` | Only class 0 |
+| `--classes 0 1` | — | Classes 0 and 1 |
 
-Example — radar and heatmap only:
+#### Defensive line (`--show_defense_line`)
 
-```bash
-python main.py detect \
-    --weights best.pt \
-    --source input.mp4 \
-    --show_radar \
-    --show_heatmap
-```
-
-Example — all overlays:
+Draws a defensive line for each side of the field. Players are sorted by vertical position — the top-N and bottom-N become the two defensive groups. Each line:
+- connects the leftmost and rightmost defender in the group (solid)
+- extends to both frame edges through those two points (semi-transparent) — shows the offside zone
 
 ```bash
 python main.py detect \
     --weights best.pt \
     --source input.mp4 \
-    --show_heatmap \
-    --show_radar \
-    --show_spider_web \
-    --show_convex_hull
+    --show_defense_line \
+    --defense_n 4
 ```
 
-On startup you will be asked to click 6 field corners for homography (radar), or press `Esc` to skip.
 Press `Q` to stop playback early.
 
 Output: `out/result.mp4`, `out/detections.csv`
@@ -137,7 +126,7 @@ football_analytics/
 ├── main.py               # FootballAnalytics class (inherits all) + CLI
 ├── trainer.py            # YOLOTrainer
 ├── category_detector.py  # CategoryDetector — simple bbox + label per class
-├── player_detector.py    # PlayerDetector   — heatmap, radar, overlays
+├── player_detector.py    # PlayerDetector   — overlays
 ├── speed_tracker.py      # SpeedTracker     — speed, sprints, CSV
 └── requirements.txt
 ```
@@ -160,8 +149,6 @@ fa.detect()   # detection only (no overlays by default)
 fa2 = FootballAnalytics(
     weights="best.pt",
     source="input.mp4",
-    show_heatmap=True,
-    show_radar=True,
     show_spider_web=True,
     show_convex_hull=True,
 )

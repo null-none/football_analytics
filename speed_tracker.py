@@ -343,7 +343,7 @@ class SpeedTracker:
                 with open(csv_path, "a", newline="", encoding="utf-8") as f:
                     csv.writer(f).writerows(csv_rows)
 
-            #cv2.imshow("Football Analytics — Speed Tracker", frame)
+            cv2.imshow("Football Analytics — Speed Tracker", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
 
