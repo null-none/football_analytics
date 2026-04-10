@@ -61,8 +61,10 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
         # category detection
         cat_out_dir: str = "out_category",
         # speed
-        field_w_m: float = 68.0,  # Standard football field width
+        field_w_m: float = 68.0,
+        field_h_m: float = 105.0,
         field_w_px: float = 950.0,
+        calibrate: bool = False,
         smooth: int = 15,
         show_frame_id: bool = False,
     ):
@@ -109,7 +111,9 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
             conf=conf,
             imgsz=imgsz,
             field_w_m=field_w_m,
+            field_h_m=field_h_m,
             field_w_px=field_w_px,
+            calibrate=calibrate,
             smooth=smooth,
             classes=classes,
             show_frame_id=show_frame_id,
@@ -220,13 +224,25 @@ def build_parser():
         "--field_w_m",
         type=float,
         default=68.0,
-        help="Football field width in metres (default: 68)",
+        help="Field width in metres (default: 68)",
+    )
+    s.add_argument(
+        "--field_h_m",
+        type=float,
+        default=105.0,
+        help="Field length in metres (default: 105); used for calibration",
     )
     s.add_argument(
         "--field_w_px",
         type=float,
-        required=True,
-        help="Football field width in pixels in the source video",
+        default=950.0,
+        help="Field width in pixels — fallback when --calibrate is not used (default: 950)",
+    )
+    s.add_argument(
+        "--calibrate",
+        action="store_true",
+        default=False,
+        help="Open interactive 6-point field calibration before tracking",
     )
     s.add_argument("--smooth", type=int, default=15)
     s.add_argument(
@@ -298,7 +314,9 @@ def main():
             conf=args.conf,
             imgsz=args.imgsz,
             field_w_m=args.field_w_m,
+            field_h_m=args.field_h_m,
             field_w_px=args.field_w_px,
+            calibrate=args.calibrate,
             smooth=args.smooth,
             classes=args.classes,
             show_frame_id=args.show_frame_id,
