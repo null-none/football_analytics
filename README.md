@@ -65,19 +65,21 @@ All visual overlays are **disabled by default**. Enable them individually with f
 |---|---|
 | `--show_spider_web` | Lines connecting every pair of detected players |
 | `--show_convex_hull` | Filled convex hull around all detected players |
-| `--show_defense_line` | Defensive lines for both sides |
+| `--show_defense_line` | Defensive line through each team's backline (by Y position) |
+| `--show_defense_zone` | Vertical defensive line per team sorted by X (requires `--classes 0 1`) |
+| `--show_pressure` | Pressing pressure halos on each player (requires `--classes 0 1`) |
 
 | Flag | Default | Description |
 |---|---|---|
-| `--defense_n 4` | `4` | Number of defenders per side for the defensive line |
+| `--defense_n 4` | `4` | Number of defenders per side |
+| `--pressure_r 120` | `120` | Opponent detection radius in pixels for pressure halo |
 | `--classes 0` | `0` | Only class 0 |
 | `--classes 0 1` | — | Classes 0 and 1 |
 
 #### Defensive line (`--show_defense_line`)
 
-Draws a defensive line for each side of the field. Players are sorted by vertical position — the top-N and bottom-N become the two defensive groups. Each line:
-- connects the leftmost and rightmost defender in the group (solid)
-- extends to both frame edges through those two points (semi-transparent) — shows the offside zone
+Draws a polyline through the N deepest defenders on each side, sorted left→right. Each defender's real Y position is preserved — you can see if the line is flat or broken.
+Extends to both frame edges with a semi-transparent ghost line.
 
 ```bash
 python main.py detect \
@@ -85,6 +87,40 @@ python main.py detect \
     --source input.mp4 \
     --show_defense_line \
     --defense_n 4
+```
+
+#### Defensive zone (`--show_defense_zone`)
+
+Draws a vertical line for each team through the last N defenders (the ones furthest from midfield), sorted by Y. Shows horizontal positioning and gaps. Requires `--classes 0 1`.
+
+```bash
+python main.py detect \
+    --weights best.pt \
+    --source input.mp4 \
+    --show_defense_zone \
+    --defense_n 4 \
+    --classes 0 1
+```
+
+#### Pressing pressure (`--show_pressure`)
+
+Draws a colour-coded halo around each player based on how many opponents are within `--pressure_r` pixels:
+
+| Opponents nearby | Halo colour |
+|---|---|
+| 1 | Yellow |
+| 2 | Orange |
+| 3+ | Red |
+
+Requires two classes (`--classes 0 1`) to distinguish teams.
+
+```bash
+python main.py detect \
+    --weights best.pt \
+    --source input.mp4 \
+    --show_pressure \
+    --pressure_r 120 \
+    --classes 0 1
 ```
 
 Press `Q` to stop playback early.
@@ -123,11 +159,12 @@ Output: `out_speed/result_speed.mp4`, `out_speed/speeds.csv`, `out_speed/summary
 
 ```
 football_analytics/
-├── main.py               # FootballAnalytics class (inherits all) + CLI
-├── trainer.py            # YOLOTrainer
-├── category_detector.py  # CategoryDetector — simple bbox + label per class
-├── player_detector.py    # PlayerDetector   — overlays
-├── speed_tracker.py      # SpeedTracker     — speed, sprints, CSV
+├── main.py                # FootballAnalytics class (inherits all) + CLI
+├── trainer.py             # YOLOTrainer
+├── category_detector.py   # CategoryDetector  — simple bbox + label per class
+├── player_detector.py     # PlayerDetector    — overlays
+├── pressure_analyzer.py   # PressureAnalyzer  — pressing pressure halos
+├── speed_tracker.py       # SpeedTracker      — speed, sprints, CSV
 └── requirements.txt
 ```
 
@@ -151,6 +188,9 @@ fa2 = FootballAnalytics(
     source="input.mp4",
     show_spider_web=True,
     show_convex_hull=True,
+    show_pressure=True,
+    pressure_r=120,
+    classes=[0, 1],
 )
 fa2.detect()
 fa.track()    # speed + sprint stats

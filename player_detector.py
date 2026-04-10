@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 from ultralytics import YOLO
+from pressure_analyzer import PressureAnalyzer
 
 
 class PlayerDetector:
@@ -35,6 +36,8 @@ class PlayerDetector:
         show_defense_line: bool = False,
         defense_n: int = 4,
         show_defense_zone: bool = False,
+        show_pressure: bool = False,
+        pressure_r: int = 120,
         classes: list = None,
     ):
         self.weights = weights
@@ -48,6 +51,8 @@ class PlayerDetector:
         self.show_defense_line = show_defense_line
         self.defense_n = defense_n
         self.show_defense_zone = show_defense_zone
+        self.show_pressure = show_pressure
+        self.pressure_r = pressure_r
         # smoothing state: {cls_id: {'pts': np.array, 'ttl': int}}
         self._dzone_state = {}
         self.classes = classes if classes is not None else [0]
@@ -290,6 +295,9 @@ class PlayerDetector:
 
             if self.show_convex_hull and len(centers) >= 3:
                 self._draw_convex_hull(frame, centers)
+
+            if self.show_pressure:
+                PressureAnalyzer.draw_pressure(frame, centers_by_cls, self.pressure_r)
 
             if rows:
                 with open(csv_path, "a", newline="", encoding="utf-8") as f:

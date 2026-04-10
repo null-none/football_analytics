@@ -55,6 +55,8 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
         show_defense_line: bool = False,
         defense_n: int = 4,
         show_defense_zone: bool = False,
+        show_pressure: bool = False,
+        pressure_r: int = 120,
         classes: list = None,
         # category detection
         cat_out_dir: str = "out_category",
@@ -86,6 +88,8 @@ class FootballAnalytics(YOLOTrainer, PlayerDetector, SpeedTracker, CategoryDetec
             show_defense_line=show_defense_line,
             defense_n=defense_n,
             show_defense_zone=show_defense_zone,
+            show_pressure=show_pressure,
+            pressure_r=pressure_r,
             classes=classes,
         )
         CategoryDetector.__init__(
@@ -169,6 +173,18 @@ def build_parser():
         action="store_true",
         default=False,
         help="Show vertical defensive zone lines for both sides (default: off)",
+    )
+    d.add_argument(
+        "--show_pressure",
+        action="store_true",
+        default=False,
+        help="Show pressing pressure halos on each player (default: off)",
+    )
+    d.add_argument(
+        "--pressure_r",
+        type=int,
+        default=120,
+        help="Radius in pixels to count opponents as pressing (default: 120)",
     )
     d.add_argument(
         "--classes",
@@ -268,6 +284,8 @@ def main():
             show_defense_line=args.show_defense_line,
             defense_n=args.defense_n,
             show_defense_zone=args.show_defense_zone,
+            show_pressure=args.show_pressure,
+            pressure_r=args.pressure_r,
             classes=args.classes,
         )
         fa.detect()
