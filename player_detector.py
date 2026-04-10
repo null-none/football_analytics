@@ -100,8 +100,8 @@ class PlayerDetector:
         sorted_centers = sorted(centers, key=lambda p: p[1])
 
         for group, color in (
-            (sorted_centers[:n],  (0, 220, 255)),   # top side — yellow
-            (sorted_centers[-n:], (255, 160, 0)),   # bottom side — blue
+            (sorted_centers[:n], (0, 220, 255)),  # top side — yellow
+            (sorted_centers[-n:], (255, 160, 0)),  # bottom side — blue
         ):
             # Sort left → right by X
             pts = sorted(group, key=lambda p: p[0])
@@ -122,7 +122,14 @@ class PlayerDetector:
             cv2.addWeighted(overlay, 0.35, frame, 0.65, 0, frame)
 
             # Main polyline through all defender points
-            cv2.polylines(frame, [arr], isClosed=False, color=color, thickness=2, lineType=cv2.LINE_AA)
+            cv2.polylines(
+                frame,
+                [arr],
+                isClosed=False,
+                color=color,
+                thickness=2,
+                lineType=cv2.LINE_AA,
+            )
 
             # Dot on each defender
             for x, y in arr:
@@ -131,9 +138,14 @@ class PlayerDetector:
             mid_x = int(arr[:, 0].mean())
             mid_y = int(arr[:, 1].mean())
             cv2.putText(
-                frame, "DEF",
+                frame,
+                "DEF",
                 (mid_x - 18, mid_y - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2, cv2.LINE_AA,
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                2,
+                cv2.LINE_AA,
             )
 
     @staticmethod
@@ -144,13 +156,16 @@ class PlayerDetector:
         The left/right side is determined automatically by average X — no hardcoded class IDs.
         Positions are smoothed with EMA and fade out gradually when detections disappear.
         """
-        _ALPHA      = 0.35   # EMA weight for new positions (lower = smoother)
-        _FADE_FRAMES = 20    # frames to fully fade out after losing detections
+        _ALPHA = 0.35  # EMA weight for new positions (lower = smoother)
+        _FADE_FRAMES = 20  # frames to fully fade out after losing detections
         _COLORS = [(0, 220, 255), (255, 160, 0), (100, 255, 100), (255, 80, 200)]
 
         # Assign colors and determine which side each class belongs to
-        avg_x = {cls_id: float(np.mean([p[0] for p in pts]))
-                 for cls_id, pts in centers_by_cls.items() if pts}
+        avg_x = {
+            cls_id: float(np.mean([p[0] for p in pts]))
+            for cls_id, pts in centers_by_cls.items()
+            if pts
+        }
         sorted_cls = sorted(avg_x, key=avg_x.get)  # left → right by average X
 
         for color_idx, cls_id in enumerate(sorted_cls):
@@ -158,38 +173,47 @@ class PlayerDetector:
             pts = centers_by_cls.get(cls_id, [])
 
             # Determine side: left-side teams defend on the left (pick lowest X defenders)
-            is_left = (color_idx < len(sorted_cls) / 2)
+            is_left = color_idx < len(sorted_cls) / 2
 
             if len(pts) >= 2:
                 # Pick last n defenders by X
                 defenders_raw = sorted(pts, key=lambda p: p[0], reverse=not is_left)[:n]
                 # Sort by Y for a clean vertical polyline
                 defenders_raw = sorted(defenders_raw, key=lambda p: p[1])
-                new_pts = np.array([[p[0], p[1]] for p in defenders_raw], dtype=np.float32)
+                new_pts = np.array(
+                    [[p[0], p[1]] for p in defenders_raw], dtype=np.float32
+                )
 
                 s = state.get(cls_id)
-                if s is None or len(s['pts']) != len(new_pts):
+                if s is None or len(s["pts"]) != len(new_pts):
                     # First detection or count changed — reset
-                    state[cls_id] = {'pts': new_pts.copy(), 'ttl': _FADE_FRAMES}
+                    state[cls_id] = {"pts": new_pts.copy(), "ttl": _FADE_FRAMES}
                 else:
                     # EMA smooth
-                    s['pts'] = _ALPHA * new_pts + (1 - _ALPHA) * s['pts']
-                    s['ttl'] = _FADE_FRAMES
+                    s["pts"] = _ALPHA * new_pts + (1 - _ALPHA) * s["pts"]
+                    s["ttl"] = _FADE_FRAMES
             else:
                 # No detection this frame — decay ttl
                 s = state.get(cls_id)
                 if s is None:
                     continue
-                s['ttl'] = max(0, s['ttl'] - 1)
-                if s['ttl'] == 0:
+                s["ttl"] = max(0, s["ttl"] - 1)
+                if s["ttl"] == 0:
                     continue
 
             s = state[cls_id]
-            opacity = s['ttl'] / _FADE_FRAMES
-            arr = s['pts'].astype(np.int32)
+            opacity = s["ttl"] / _FADE_FRAMES
+            arr = s["pts"].astype(np.int32)
 
             overlay = frame.copy()
-            cv2.polylines(overlay, [arr], isClosed=False, color=color, thickness=2, lineType=cv2.LINE_AA)
+            cv2.polylines(
+                overlay,
+                [arr],
+                isClosed=False,
+                color=color,
+                thickness=2,
+                lineType=cv2.LINE_AA,
+            )
             for x, y in arr:
                 cv2.circle(overlay, (int(x), int(y)), 5, color, -1, cv2.LINE_AA)
             cv2.addWeighted(overlay, opacity, frame, 1 - opacity, 0, frame)
@@ -288,7 +312,9 @@ class PlayerDetector:
                 self._draw_defense_lines(frame, centers, self.defense_n)
 
             if self.show_defense_zone:
-                self._draw_defense_zone(frame, centers_by_cls, self.defense_n, self._dzone_state)
+                self._draw_defense_zone(
+                    frame, centers_by_cls, self.defense_n, self._dzone_state
+                )
 
             if self.show_spider_web and len(centers) >= 2:
                 self._draw_spider_web(frame, centers)

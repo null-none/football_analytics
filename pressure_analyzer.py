@@ -22,9 +22,9 @@ class PressureAnalyzer:
 
     # pressure level → BGR colour
     _PRESSURE_COLORS = {
-        1: (0, 220, 255),   # yellow
-        2: (0, 140, 255),   # orange
-        3: (0, 60,  255),   # red
+        1: (0, 220, 255),  # yellow
+        2: (0, 140, 255),  # orange
+        3: (0, 60, 255),  # red
     }
 
     @staticmethod
@@ -45,9 +45,12 @@ class PressureAnalyzer:
         # Determine opponent dict for each class
         # Team with lower average X → left side; opponent = the other class.
         # Works for any two class IDs, not just 0 and 1.
-        avg_x = {c: float(np.mean([p[0] for p in pts]))
-                 for c, pts in centers_by_cls.items() if pts}
-        sorted_cls = sorted(avg_x, key=avg_x.get)   # [left_cls, right_cls]
+        avg_x = {
+            c: float(np.mean([p[0] for p in pts]))
+            for c, pts in centers_by_cls.items()
+            if pts
+        }
+        sorted_cls = sorted(avg_x, key=avg_x.get)  # [left_cls, right_cls]
 
         opponents = {
             sorted_cls[0]: centers_by_cls.get(sorted_cls[1], []),
@@ -59,7 +62,7 @@ class PressureAnalyzer:
             if not opp_pts:
                 continue
 
-            opp_arr = np.array(opp_pts, dtype=np.float32)   # (M, 2)
+            opp_arr = np.array(opp_pts, dtype=np.float32)  # (M, 2)
 
             for cx, cy in pts:
                 # Euclidean distances to all opponents
